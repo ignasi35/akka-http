@@ -4,27 +4,28 @@
 
 package akka.http.impl.engine.http2
 
-import akka.actor.{ ActorSystem, ClassicActorSystemProvider, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider }
+import akka.actor.{ActorSystem, ClassicActorSystemProvider, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
 import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
 import akka.event.LoggingAdapter
-import akka.http.impl.engine.server.{ MasterServerTerminator, UpgradeToOtherProtocolResponseHeader }
+import akka.http.impl.engine.server.{MasterServerTerminator, UpgradeToOtherProtocolResponseHeader}
 import akka.http.impl.util.LogByteStringTools
 import akka.http.scaladsl.Http.OutgoingConnection
-import akka.http.scaladsl.{ ConnectionContext, Http, HttpsConnectionContext }
+import akka.http.scaladsl.{ConnectionContext, Http, HttpsConnectionContext}
 import akka.http.scaladsl.Http.ServerBinding
+import akka.http.scaladsl.HttpExt
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.{ Connection, RawHeader, Upgrade, UpgradeProtocol }
+import akka.http.scaladsl.model.headers.{Connection, RawHeader, Upgrade, UpgradeProtocol}
 import akka.http.scaladsl.model.http2.Http2SettingsHeader
 import akka.http.scaladsl.settings.ClientConnectionSettings
 import akka.http.scaladsl.settings.ServerSettings
 import akka.stream.TLSClosing
-import akka.stream.TLSProtocol.{ SslTlsInbound, SslTlsOutbound }
+import akka.stream.TLSProtocol.{SslTlsInbound, SslTlsOutbound}
 import akka.stream.impl.io.TlsUtils
-import akka.stream.scaladsl.{ Flow, Keep, Sink, Source, TLS, TLSPlacebo, Tcp }
-import akka.stream.{ IgnoreComplete, Materializer }
+import akka.stream.scaladsl.{Flow, Keep, Sink, Source, TLS, TLSPlacebo, Tcp}
+import akka.stream.{IgnoreComplete, Materializer}
 import akka.util.ByteString
-import akka.{ Done, NotUsed }
+import akka.{Done, NotUsed}
 import com.typesafe.config.Config
 import javax.net.ssl.SSLEngine
 
@@ -32,7 +33,7 @@ import scala.collection.immutable
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
-import scala.util.{ Failure, Success }
+import scala.util.{Failure, Success}
 
 /**
  * INTERNAL API
@@ -48,7 +49,7 @@ private[http] final class Http2Ext(private val config: Config)(implicit val syst
 
   private[this] final val DefaultPortForProtocol = -1 // any negative value
 
-  val http = Http(system)
+  val http: HttpExt = Http(system)
 
   // TODO: split up similarly to what `Http` does into `serverLayer`, `bindAndHandle`, etc.
   def bindAndHandleAsync(
@@ -209,7 +210,8 @@ private[http] final class Http2Ext(private val config: Config)(implicit val syst
       LogByteStringTools.logTLSBidiBySetting("client-plain-text", clientConnectionSettings.logUnencryptedNetworkBytes) atop
       TLS(createEngine _, closing = TLSClosing.eagerClose)
 
-    stack.joinMat(clientConnectionSettings.transport.connectTo(host, port, clientConnectionSettings)(system.classicSystem))(Keep.right)
+    val outgoingConnectionFlow = stack.joinMat(clientConnectionSettings.transport.connectTo(host, port, clientConnectionSettings)(system.classicSystem))(Keep.right)
+    http._clientTelemetry.instrumenting(outgoingConnectionFlow)
   }
 
   def outgoingConnectionPriorKnowledge(host: String, port: Int, clientConnectionSettings: ClientConnectionSettings, log: LoggingAdapter): Flow[HttpRequest, HttpResponse, Future[OutgoingConnection]] = {
@@ -218,7 +220,8 @@ private[http] final class Http2Ext(private val config: Config)(implicit val syst
       LogByteStringTools.logTLSBidiBySetting("client-plain-text", clientConnectionSettings.logUnencryptedNetworkBytes) atop
       TLSPlacebo()
 
-    stack.joinMat(clientConnectionSettings.transport.connectTo(host, port, clientConnectionSettings)(system.classicSystem))(Keep.right)
+    val outgoingConnectionFlow = stack.joinMat(clientConnectionSettings.transport.connectTo(host, port, clientConnectionSettings)(system.classicSystem))(Keep.right)
+    http._clientTelemetry.instrumenting(outgoingConnectionFlow)
   }
 
 }
