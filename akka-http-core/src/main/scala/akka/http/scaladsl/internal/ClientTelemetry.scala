@@ -1,5 +1,6 @@
 package akka.http.scaladsl.internal
 
+import akka.Done
 import akka.actor.ActorSystem
 import akka.actor.ExtendedActorSystem
 import akka.annotation.InternalApi
@@ -13,11 +14,12 @@ import scala.collection.immutable
 import scala.concurrent.Future
 
 /**
- * 
+ *
  */
 @InternalStableApi
 trait ClientTelemetry {
   def instrumenting(clientFlow: Flow[HttpRequest, HttpResponse, Future[OutgoingConnection]]): Flow[HttpRequest, HttpResponse, Future[OutgoingConnection]]
+  def shutdown(): Future[Done]
 }
 
 /**
@@ -25,10 +27,13 @@ trait ClientTelemetry {
  */
 @InternalApi private[http] object ClientTelemetryProvider {
   def start(system: ExtendedActorSystem): ClientTelemetry = {
-    if (!system.settings.config.hasPath("akka.http.client.telemetry.implementation")) {
+
+    val ClientTelemetryImplementation = "akka.http.client.telemetry.implementation"
+
+    if (!system.settings.config.hasPath(ClientTelemetryImplementation)) {
       NoopClientTelemetry
     } else {
-      val telemetryFqcn = system.settings.config.getString("akka.projection.telemetry.implementation")
+      val telemetryFqcn = system.settings.config.getString(ClientTelemetryImplementation)
       system.dynamicAccess
         .createInstanceFor[ClientTelemetry](telemetryFqcn, immutable.Seq((classOf[ActorSystem], system)))
         .get
@@ -37,12 +42,11 @@ trait ClientTelemetry {
 
 }
 
-
 /**
  * INTERNAL API
  */
-@InternalApi private[http] object NoopClientTelemetry extends ClientTelemetry{
-  override def instrumenting(clientFlow : Flow[HttpRequest, HttpResponse, Future[OutgoingConnection]]): Flow[HttpRequest, HttpResponse, Future[OutgoingConnection]] = clientFlow
+@InternalApi private[http] object NoopClientTelemetry extends ClientTelemetry {
+  override def instrumenting(clientFlow: Flow[HttpRequest, HttpResponse, Future[OutgoingConnection]]): Flow[HttpRequest, HttpResponse, Future[OutgoingConnection]] = clientFlow
+  override def shutdown(): Future[Done] = Future.successful(Done)
 }
-
 

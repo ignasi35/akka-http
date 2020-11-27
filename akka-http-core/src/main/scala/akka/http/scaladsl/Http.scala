@@ -12,25 +12,25 @@ import akka.actor._
 import akka.annotation.DoNotInherit
 import akka.annotation.InternalApi
 import akka.dispatch.ExecutionContexts
-import akka.event.{Logging, LoggingAdapter}
+import akka.event.{ Logging, LoggingAdapter }
 import akka.http.impl.engine.HttpConnectionIdleTimeoutBidi
 import akka.http.impl.engine.client._
 import akka.http.impl.engine.http2.Http2
 import akka.http.impl.engine.http2.OutgoingConnectionBuilderImpl
 import akka.http.impl.engine.server._
 import akka.http.impl.engine.ws.WebSocketClientBlueprint
-import akka.http.impl.settings.{ConnectionPoolSetup, HostConnectionPoolSetup}
+import akka.http.impl.settings.{ ConnectionPoolSetup, HostConnectionPoolSetup }
 import akka.http.impl.util.StreamUtils
 import akka.http.scaladsl.internal.ClientTelemetryProvider
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.Host
-import akka.http.scaladsl.model.ws.{Message, WebSocketRequest, WebSocketUpgradeResponse}
-import akka.http.scaladsl.settings.{ClientConnectionSettings, ConnectionPoolSettings, ServerSettings}
+import akka.http.scaladsl.model.ws.{ Message, WebSocketRequest, WebSocketUpgradeResponse }
+import akka.http.scaladsl.settings.{ ClientConnectionSettings, ConnectionPoolSettings, ServerSettings }
 import akka.http.scaladsl.util.FastFuture
 import akka.stream.Attributes.CancellationStrategy
 import akka.stream.Attributes.CancellationStrategy.AfterDelay
 import akka.stream.Attributes.CancellationStrategy.FailStage
-import akka.{Done, NotUsed}
+import akka.{ Done, NotUsed }
 import akka.stream._
 import akka.stream.TLSProtocol._
 import akka.stream.scaladsl._
@@ -43,10 +43,10 @@ import com.typesafe.sslconfig.akka.util.AkkaLoggerFactory
 import com.typesafe.sslconfig.ssl.ConfigSSLContextBuilder
 
 import scala.concurrent._
-import scala.util.{Success, Try}
+import scala.util.{ Success, Try }
 import scala.util.control.NonFatal
 import scala.compat.java8.FutureConverters._
-import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.concurrent.duration._
 
 /**
@@ -89,6 +89,14 @@ class HttpExt private[http] (private val config: Config)(implicit val system: Ex
   // SYNCHRONIZED ACCESS ONLY!
   private[this] var _defaultClientHttpsConnectionContext: HttpsConnectionContext = _
   private[this] var _defaultServerConnectionContext: ConnectionContext = _
+
+  // ** TELEMETRY ** //
+
+  private[http] lazy val _clientTelemetry = ClientTelemetryProvider.start(system)
+
+CoordinatedShutdown(system).addTask(CoordinatedShutdown.PhaseBeforeActorSystemTerminate, "shutdown-akka-http-telemetry"){() =>
+  _clientTelemetry.shutdown()
+}
 
   // ** SERVER ** //
 
@@ -448,9 +456,6 @@ class HttpExt private[http] (private val config: Config)(implicit val system: Ex
     settings:          ClientConnectionSettings = ClientConnectionSettings(system),
     log:               LoggingAdapter           = system.log): Flow[HttpRequest, HttpResponse, Future[OutgoingConnection]] =
     _outgoingConnection(host, port, settings, connectionContext, log)
-
-
-  private[http] lazy val _clientTelemetry = ClientTelemetryProvider.start(system)
 
   private def _outgoingConnection(
     host:              String,
