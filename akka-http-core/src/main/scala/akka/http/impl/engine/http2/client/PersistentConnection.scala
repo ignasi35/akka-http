@@ -39,7 +39,8 @@ private[http2] object PersistentConnection {
   private val errorResponse =
     HttpResponse(
       StatusCodes.BadGateway,
-      entity = "The server closed the connection before delivering a response.")
+      entity = "The " +
+        "server closed the connection before delivering a response.")
 
   private class Stage(connectionFlow: Flow[HttpRequest, HttpResponse, Any]) extends GraphStage[FlowShape[HttpRequest, HttpResponse]] {
     val requestIn = Inlet[HttpRequest]("PersistentConnection.requestIn")

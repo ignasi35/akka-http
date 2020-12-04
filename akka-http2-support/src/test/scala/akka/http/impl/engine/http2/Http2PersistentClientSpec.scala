@@ -181,8 +181,14 @@ class Http2PersistentClientSpec extends AkkaSpecWithMaterializer(
     def serverSettings: ServerSettings = ServerSettings(system)
     def clientSettings: ClientConnectionSettings = ClientConnectionSettings(system)
 
-    val killProbe = TestProbe()
-    def killConnection(): Unit = killProbe.expectMsgType[UniqueKillSwitch].abort(new RuntimeException("connection was killed"))
+    def killConnection(): Unit = synchronized {
+      binding.unbind().futureValue
+      binding =
+        Http().newServerAt("localhost", 0)
+          .enableHttps(ExampleHttpContexts.exampleServerContext)
+          .withSettings(serverSettings)
+          .bind(handler).futureValue
+    }
 
     private lazy val serverRequestProbe = TestProbe()
     private lazy val handler: HttpRequest => Future[HttpResponse] = { req =>
@@ -190,19 +196,17 @@ class Http2PersistentClientSpec extends AkkaSpecWithMaterializer(
       serverRequestProbe.ref ! ServerRequest(req, p)
       p.future
     }
-    lazy val binding =
+    var binding =
       Http().newServerAt("localhost", 0)
         .enableHttps(ExampleHttpContexts.exampleServerContext)
         .withSettings(serverSettings)
         .bind(handler).futureValue
 
+    def currentBinding = binding
+
     val transport = new ClientTransport {
       override def connectTo(host: String, port: Int, settings: ClientConnectionSettings)(implicit system: ActorSystem): Flow[ByteString, ByteString, Future[Http.OutgoingConnection]] =
-        Flow.fromGraph(KillSwitches.single[ByteString])
-          .mapMaterializedValue { killer =>
-            killProbe.ref ! killer
-          }
-          .viaMat(ClientTransport.TCP.connectTo(binding.localAddress.getHostString, binding.localAddress.getPort, settings)(system))(Keep.right)
+        ClientTransport.TCP.connectTo(currentBinding.localAddress.getHostString, currentBinding.localAddress.getPort, settings)(system)
     }
 
     lazy val clientFlow =
